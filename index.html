@@ -159,17 +159,74 @@
       text-decoration: none;
       margin-left: 7px;
     }
-    /* 커서에 토마토 추가 */
     body {
       cursor: url('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f345.png') 16 16, auto;
     }
-    @media (max-width: 800px) {
-      .features { flex-direction: column; gap: 1.2rem; }
-      .feature-card { max-width: 98vw; }
-      h1 { font-size: 2.1rem; }
+    /* --- Tetris styles --- */
+    .tetris-section {
+      margin: 3rem auto 0 auto;
+      max-width: 390px;
+      background: #fffdfd;
+      border-radius: 1.2rem;
+      box-shadow: 0 8px 28px #ff63472d;
+      padding: 1.4rem 0 2.3rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 2.5px solid var(--tomato);
+      position: relative;
+    }
+    .tetris-title {
+      font-family: 'Gugi', cursive, sans-serif;
+      font-size: 1.6rem;
+      color: var(--tomato);
+      letter-spacing: 2px;
+      margin-bottom: 0.4rem;
+      margin-top: 0;
+      text-shadow: 0 2px 14px #ff634733;
+    }
+    #tetris {
+      display: block;
+      background: #d8fff3;
+      margin-bottom: 1.1rem;
+      border: 2px solid var(--green);
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 14px #00ffd066;
+    }
+    .score {
+      font-family: 'Gugi', cursive, sans-serif;
+      color: var(--green);
+      font-size: 1.05rem;
+      margin-bottom: 1.2rem;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+    .tetris-controls {
+      margin-top: 0.4rem;
+      font-size: 0.95rem;
+      color: #888;
+      text-align: center;
+      user-select: none;
+      font-family: 'Pretendard', 'Inter', Arial, sans-serif;
+    }
+    .tetris-restart {
+      margin-top: 0.5rem;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 0.6rem;
+      font-family: 'Gugi', cursive, sans-serif;
+      font-size: 1rem;
+      padding: 0.4rem 1.2rem;
+      cursor: pointer;
+      transition: background 0.14s;
+      box-shadow: 0 2px 8px #39b54a33;
+    }
+    .tetris-restart:hover { background: var(--tomato); color: #fff; }
+    @media (max-width: 600px) {
+      .tetris-section { max-width: 99vw; padding: 0.6rem 0 1.4rem 0; }
     }
   </style>
-  <!-- 구글 Gugi 폰트 (한글/영문 자유롭게) -->
   <link href="https://fonts.googleapis.com/css2?family=Gugi&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -205,10 +262,118 @@
         </div>
       </div>
     </section>
+    
+    <!-- 🍓🍌🍏🍈🥥 테트리스 섹션 -->
+    <section class="tetris-section">
+      <h2 class="tetris-title">과일 테트리스</h2>
+      <div class="score" id="score">점수: 0</div>
+      <canvas id="tetris" width="200" height="400" tabindex="0"></canvas>
+      <div class="tetris-controls">
+        ←→: 이동 &nbsp; ↑: 회전 &nbsp; ↓: 빠르게 <br>
+        <span style="font-size:0.92em">Restart: <b>스페이스바</b></span>
+      </div>
+      <button class="tetris-restart" onclick="restartTetris()">다시 시작</button>
+    </section>
+    
     <footer class="footer">
       &copy; 2025 마토마. <span>토마토 아니고, 마토마.</span><br>
       <a href="mailto:nobody@matoma.com" title="답장 안 옴">문의도 환영하지 않음</a>
     </footer>
   </main>
-</body>
-</html>
+  <script>
+    // --- 테트리스 로직 (과일 블록) ---
+    const canvas = document.getElementById('tetris');
+    const ctx = canvas.getContext('2d');
+    const ROWS = 20, COLS = 10, BLOCK = 20;
+    const board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    const fruits = [
+      {name: '딸기', emoji: '🍓', color: '#ea2244'},
+      {name: '바나나', emoji: '🍌', color: '#ffe45c'},
+      {name: '사과', emoji: '🍏', color: '#84d36d'},
+      {name: '메론', emoji: '🍈', color: '#a8ef8c'},
+      {name: '코코넛', emoji: '🥥', color: '#c6b093'},
+    ];
+    // 블록 도형(테트로미노) 정의: shape, 과일
+    const TETROMINOES = [
+      // I
+      { shape: [[1,1,1,1]], fruit: 0 },
+      // O
+      { shape: [[1,1],[1,1]], fruit: 1 },
+      // T
+      { shape: [[0,1,0],[1,1,1]], fruit: 2 },
+      // L
+      { shape: [[1,0,0],[1,1,1]], fruit: 3 },
+      // J
+      { shape: [[0,0,1],[1,1,1]], fruit: 4 },
+      // S
+      { shape: [[0,1,1],[1,1,0]], fruit: 0 },
+      // Z
+      { shape: [[1,1,0],[0,1,1]], fruit: 1 },
+    ];
+    let score = 0;
+    let cur, next, dropStart, dropping, gameover = false;
+
+    // --- 블록 그리기 ---
+    function drawCell(x, y, fruitIdx) {
+      if (fruitIdx === 0) { // 딸기
+        ctx.fillStyle = fruits[fruitIdx].color;
+        ctx.beginPath();
+        ctx.arc(x+BLOCK/2, y+BLOCK/2, BLOCK/2-2, 0, 2*Math.PI);
+        ctx.fill();
+        ctx.font = '17px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fruits[fruitIdx].emoji, x+BLOCK/2, y+BLOCK/2);
+      } else {
+        ctx.fillStyle = fruits[fruitIdx].color;
+        ctx.fillRect(x+2, y+2, BLOCK-4, BLOCK-4);
+        ctx.font = '17px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fruits[fruitIdx].emoji, x+BLOCK/2, y+BLOCK/2);
+      }
+    }
+    function drawBoard() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+        if(board[r][c]) drawCell(c*BLOCK,r*BLOCK,board[r][c]-1);
+      }
+    }
+    function drawTetromino(p, ghost=false) {
+      let {shape, x, y, fruit} = p;
+      for(let r=0;r<shape.length;r++)
+        for(let c=0;c<shape[r].length;c++)
+          if(shape[r][c])
+            if (ghost)
+              ctx.globalAlpha = 0.33, drawCell((x+c)*BLOCK,(y+r)*BLOCK,fruit), ctx.globalAlpha = 1;
+            else
+              drawCell((x+c)*BLOCK,(y+r)*BLOCK,fruit);
+    }
+    // --- 충돌 체크 ---
+    function collision(p, nx=0, ny=0, nshape=null) {
+      let shape = nshape || p.shape;
+      for(let r=0;r<shape.length;r++)
+        for(let c=0;c<shape[r].length;c++)
+          if(shape[r][c]){
+            let nr = p.y + ny + r, nc = p.x + nx + c;
+            if(nr<0||nr>=ROWS||nc<0||nc>=COLS||board[nr][nc]) return true;
+          }
+      return false;
+    }
+    // --- 블록 고정, 라인 삭제 ---
+    function merge() {
+      let {shape,x,y,fruit}=cur;
+      for(let r=0;r<shape.length;r++)
+        for(let c=0;c<shape[r].length;c++)
+          if(shape[r][c]) board[y+r][x+c]=fruit+1;
+    }
+    function clearLines() {
+      let n=0;
+      for(let r=ROWS-1;r>=0;r--) {
+        if(board[r].every(v=>v)) {
+          board.splice(r,1); board.unshift(Array(COLS).fill(0)); n++;
+        }
+      }
+      if(n>0) score+= n*n*100;
+    }
+    // --- 블
