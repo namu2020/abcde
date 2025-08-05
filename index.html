@@ -281,99 +281,127 @@
     </footer>
   </main>
   <script>
-    // --- 테트리스 로직 (과일 블록) ---
+    // --- 테트리스 과일블록 게임 ---
     const canvas = document.getElementById('tetris');
     const ctx = canvas.getContext('2d');
     const ROWS = 20, COLS = 10, BLOCK = 20;
-    const board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
     const fruits = [
-      {name: '딸기', emoji: '🍓', color: '#ea2244'},
-      {name: '바나나', emoji: '🍌', color: '#ffe45c'},
-      {name: '사과', emoji: '🍏', color: '#84d36d'},
-      {name: '메론', emoji: '🍈', color: '#a8ef8c'},
-      {name: '코코넛', emoji: '🥥', color: '#c6b093'},
+      {name:'딸기',emoji:'🍓',color:'#ea2244'},
+      {name:'바나나',emoji:'🍌',color:'#ffe45c'},
+      {name:'사과',emoji:'🍏',color:'#84d36d'},
+      {name:'메론',emoji:'🍈',color:'#a8ef8c'},
+      {name:'코코넛',emoji:'🥥',color:'#c6b093'}
     ];
-    // 블록 도형(테트로미노) 정의: shape, 과일
     const TETROMINOES = [
       // I
-      { shape: [[1,1,1,1]], fruit: 0 },
+      {shape:[[1,1,1,1]], fruit:0},
       // O
-      { shape: [[1,1],[1,1]], fruit: 1 },
+      {shape:[[1,1],[1,1]], fruit:1},
       // T
-      { shape: [[0,1,0],[1,1,1]], fruit: 2 },
+      {shape:[[0,1,0],[1,1,1]], fruit:2},
       // L
-      { shape: [[1,0,0],[1,1,1]], fruit: 3 },
+      {shape:[[1,0,0],[1,1,1]], fruit:3},
       // J
-      { shape: [[0,0,1],[1,1,1]], fruit: 4 },
+      {shape:[[0,0,1],[1,1,1]], fruit:4},
       // S
-      { shape: [[0,1,1],[1,1,0]], fruit: 0 },
+      {shape:[[0,1,1],[1,1,0]], fruit:0},
       // Z
-      { shape: [[1,1,0],[0,1,1]], fruit: 1 },
+      {shape:[[1,1,0],[0,1,1]], fruit:1},
     ];
-    let score = 0;
-    let cur, next, dropStart, dropping, gameover = false;
+    let board, cur, next, score, dropping, gameover;
 
-    // --- 블록 그리기 ---
-    function drawCell(x, y, fruitIdx) {
-      if (fruitIdx === 0) { // 딸기
-        ctx.fillStyle = fruits[fruitIdx].color;
-        ctx.beginPath();
-        ctx.arc(x+BLOCK/2, y+BLOCK/2, BLOCK/2-2, 0, 2*Math.PI);
-        ctx.fill();
-        ctx.font = '17px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(fruits[fruitIdx].emoji, x+BLOCK/2, y+BLOCK/2);
-      } else {
-        ctx.fillStyle = fruits[fruitIdx].color;
-        ctx.fillRect(x+2, y+2, BLOCK-4, BLOCK-4);
-        ctx.font = '17px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(fruits[fruitIdx].emoji, x+BLOCK/2, y+BLOCK/2);
-      }
+    function emptyBoard() {
+      return Array.from({length:ROWS},()=>Array(COLS).fill(0));
+    }
+    function newTetromino() {
+      const t = {...TETROMINOES[Math.floor(Math.random()*TETROMINOES.length)]};
+      t.x = 3; t.y = 0;
+      t.shape = t.shape.map(row=>row.slice());
+      return t;
+    }
+    function drawCell(x,y,fruitIdx) {
+      ctx.fillStyle = fruits[fruitIdx].color;
+      ctx.fillRect(x+2, y+2, BLOCK-4, BLOCK-4);
+      ctx.font = '16px serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(fruits[fruitIdx].emoji, x+BLOCK/2, y+BLOCK/2+1);
     }
     function drawBoard() {
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-        if(board[r][c]) drawCell(c*BLOCK,r*BLOCK,board[r][c]-1);
-      }
+      for(let r=0;r<ROWS;r++)
+        for(let c=0;c<COLS;c++)
+          if(board[r][c]) drawCell(c*BLOCK, r*BLOCK, board[r][c]-1);
     }
-    function drawTetromino(p, ghost=false) {
-      let {shape, x, y, fruit} = p;
+    function drawTetromino(tet) {
+      for(let r=0;r<tet.shape.length;r++)
+        for(let c=0;c<tet.shape[r].length;c++)
+          if(tet.shape[r][c])
+            drawCell((tet.x+c)*BLOCK, (tet.y+r)*BLOCK, tet.fruit);
+    }
+    function valid(tet,dx=0,dy=0,rotShape=null) {
+      const shape = rotShape||tet.shape;
       for(let r=0;r<shape.length;r++)
         for(let c=0;c<shape[r].length;c++)
-          if(shape[r][c])
-            if (ghost)
-              ctx.globalAlpha = 0.33, drawCell((x+c)*BLOCK,(y+r)*BLOCK,fruit), ctx.globalAlpha = 1;
-            else
-              drawCell((x+c)*BLOCK,(y+r)*BLOCK,fruit);
-    }
-    // --- 충돌 체크 ---
-    function collision(p, nx=0, ny=0, nshape=null) {
-      let shape = nshape || p.shape;
-      for(let r=0;r<shape.length;r++)
-        for(let c=0;c<shape[r].length;c++)
-          if(shape[r][c]){
-            let nr = p.y + ny + r, nc = p.x + nx + c;
-            if(nr<0||nr>=ROWS||nc<0||nc>=COLS||board[nr][nc]) return true;
+          if(shape[r][c]) {
+            let nr = tet.y+dy+r, nc = tet.x+dx+c;
+            if(nr<0||nr>=ROWS||nc<0||nc>=COLS) return false;
+            if(board[nr][nc]) return false;
           }
-      return false;
+      return true;
     }
-    // --- 블록 고정, 라인 삭제 ---
-    function merge() {
-      let {shape,x,y,fruit}=cur;
-      for(let r=0;r<shape.length;r++)
-        for(let c=0;c<shape[r].length;c++)
-          if(shape[r][c]) board[y+r][x+c]=fruit+1;
+    function fix() {
+      for(let r=0;r<cur.shape.length;r++)
+        for(let c=0;c<cur.shape[r].length;c++)
+          if(cur.shape[r][c])
+            board[cur.y+r][cur.x+c]=cur.fruit+1;
     }
     function clearLines() {
       let n=0;
       for(let r=ROWS-1;r>=0;r--) {
-        if(board[r].every(v=>v)) {
-          board.splice(r,1); board.unshift(Array(COLS).fill(0)); n++;
+        if(board[r].every(x=>x)){
+          board.splice(r,1);
+          board.unshift(Array(COLS).fill(0));
+          n++;
         }
       }
-      if(n>0) score+= n*n*100;
+      score += n*n*100;
     }
-    // --- 블
+    function draw() {
+      drawBoard();
+      if(!gameover) drawTetromino(cur);
+    }
+    function drop() {
+      if(gameover) return;
+      if(valid(cur,0,1)) {
+        cur.y++;
+      } else {
+        fix();
+        clearLines();
+        cur = next;
+        next = newTetromino();
+        if(!valid(cur)) {
+          gameover=true;
+          showScore();
+          return;
+        }
+      }
+      draw();
+      showScore();
+    }
+    function showScore() {
+      document.getElementById('score').textContent =
+        gameover ? `게임 오버! 점수: ${score}` : `점수: ${score}`;
+    }
+    function tick() {
+      if(!dropping) return;
+      drop();
+      if(!gameover) setTimeout(tick, 400);
+    }
+    function move(dx) {
+      if(gameover) return;
+      if(valid(cur,dx,0)) cur.x+=dx;
+      draw();
+    }
+    function rotate() {
+      if(gameover) return;
+      let s =
